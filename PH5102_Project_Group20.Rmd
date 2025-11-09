@@ -1,0 +1,608 @@
+---
+title: "Group 20 PH5102 project"
+author: '20'
+date: "2025-11-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r 500 part1 by XueQin SHU}
+# 1. Read and store as a data frame
+sleep_data <- read.csv("https://raw.githubusercontent.com/Archmi7/sleep-project/refs/heads/main/student_sleep_patterns.csv", stringsAsFactors = FALSE)
+# 1. check and delete the NA
+#1.1 check the NA 
+missing_counts <- colSums(is.na(sleep_data[, c("Screen_Time", "Study_Hours", "Sleep_Quality")]))
+print("the numbers of NA in each columns：")
+print(missing_counts)
+# 1.2 delete the NA 
+sleep_data_clean1 <- sleep_data[complete.cases(sleep_data[, c("Screen_Time", "Study_Hours", "Sleep_Quality")]), ]
+print(paste0("number of data rows after removing missing values：", nrow(sleep_data_clean1)))
+
+# 2.check and delete outliers
+# rules：
+# - Screen_Time > 20 hours/day
+# - Study_Hours > 20 hours/day
+# - Sleep_Quality < 1 or > 10
+
+# 2.1 check the numbers of outliers
+screen_outlier <- sum(sleep_data_clean1$Screen_Time > 20, na.rm = TRUE)
+study_outlier <- sum(sleep_data_clean1$Study_Hours > 20, na.rm = TRUE)
+sleep_outlier <- sum(sleep_data_clean1$Sleep_Quality < 1 | sleep_data_clean1$Sleep_Quality > 12, na.rm = TRUE)
+
+print("\n the numbers of outliers in each colums：")
+print(paste0("Screen_Time > 20 hours：", screen_outlier, "rows"))
+print(paste0("Study_Hours > 20 hours：", study_outlier, "rows"))
+print(paste0("Sleep_Quality <1 or >10：", sleep_outlier, "rows"))
+
+#2.2 delete the outliers
+sleep_data_clean2 <- sleep_data_clean1[
+    (sleep_data_clean1$Screen_Time <= 20) & 
+   (sleep_data_clean1$Study_Hours <= 20) &  
+    (sleep_data_clean1$Sleep_Quality >= 1 & sleep_data_clean1$Sleep_Quality <= 10),
+ ]
+
+print(paste0("the numbers of data rows：", nrow(sleep_data_clean2)))
+
+
+#3.1 combine study time and screen time
+sleep_data_clean2$total_screen_time <- sleep_data_clean2$Study_Hours + sleep_data_clean2$Screen_Time
+
+#4.1 check the original data type
+current_types <- sapply(sleep_data_clean2[, c("Sleep_Quality", "total_screen_time")], class)
+print("original data type：")
+print(current_types)
+
+#4.2 check the range of values for Sleep_Quality（we expect they are 1-10）
+sleep_range <- range(sleep_data_clean2$Sleep_Quality, na.rm = TRUE)
+print(paste0("\n the range of values for Sleep_Quality：", sleep_range[1], " - ", sleep_range[2]))
+
+if (!require("tidyverse")) install.packages("tidyverse")
+library(tidyverse)
+
+# 5.1.1 distribution of total_screen_time 
+if (!require("moments")) install.packages("moments")
+if (!require("gridExtra")) install.packages("gridExtra")
+library(ggplot2)
+library(moments)
+library(gridExtra)
+
+# Descriptive statistics
+summary(sleep_data_clean2$total_screen_time)
+cat("standard deviation：", round(sd(sleep_data_clean2$total_screen_time), 2), "\n")
+cat("skewness：", round(skewness(sleep_data_clean2$total_screen_time), 2), "（0=symmetric）\n")
+cat("kurtosis：", round(kurtosis(sleep_data_clean2$total_screen_time), 2), "（3=normal distribution）\n")
+#Histogram+Density curve
+p_total_screen_hist <- ggplot(sleep_data_clean2, aes(x = total_screen_time)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 20, fill = "#1f77b4", alpha = 0.7, color = "black") +
+  geom_density(color = "#d62728", linewidth = 1) +
+  labs(title = "total_screen_time distribution", x = "total screen time（hours/day）", y = "density") +
+  theme_bw()
+
+# Box Plot
+p_total_screen_box <- ggplot(sleep_data_clean2, aes(y = total_screen_time)) +
+  geom_boxplot(fill = "#1f77b4", alpha = 0.7) +
+  labs(title = "total_screen_time box plot", y = "total screen time（hours/day）") +
+  theme_bw()
+print(p_total_screen_hist)
+print(p_total_screen_box)
+
+
+#5.21 distribution of sleep quality
+cat("\n=== Sleep_Quality data analysis ===\n")
+summary(sleep_data_clean2$Sleep_Quality)
+cat("standard deviation：", round(sd(sleep_data_clean2$Sleep_Quality), 2), "\n")
+cat("skewness：", round(skewness(sleep_data_clean2$Sleep_Quality), 2), "（0=symmetric）\n")
+cat("kurtosis：", round(kurtosis(sleep_data_clean2$Sleep_Quality), 2), "（3=normal distribution）\n")
+
+score_prop <- prop.table(table(sleep_data_clean2$Sleep_Quality)) * 100
+cat("\nsleep quality score proportion（%）：\n")
+print(round(score_prop, 2))
+
+# 1. histogram+density curve（bins=10）
+dev.new()
+hist(sleep_data_clean2$Sleep_Quality, 
+     prob = TRUE, bins = 10, col = "#9467bd80", border = "black",
+     main = "Sleep_Quality distribution histogram", xlab = "sleep quality score（1-10）", ylab = "density")
+lines(density(sleep_data_clean2$Sleep_Quality), col = "#8c564b", lwd = 2)
+
+# 2. bra plot
+dev.new()
+barplot(score_prop, col = "#9467bd80", border = "black",
+        main = "Sleep_Quality score proportion", xlab = "score", ylab = "proportion（%）",
+        ylim = c(0, max(score_prop) + 5))  
+# 3.box plot
+dev.new()
+boxplot(sleep_data_clean2$Sleep_Quality,col="#9467bd80",main="Sleep_Quality box plot",ylab="sleep quanlity score(1-10)")
+
+
+# 6.1 draw scatter plot
+scatter_plot <- ggplot(sleep_data_clean2, aes(x = total_screen_time, y = Sleep_Quality)) +
+ 
+  geom_point(alpha = 0.6, color = "#2E86AB", size = 2) +
+ 
+  geom_smooth(method = "lm", se = FALSE, color = "#A23B72", linetype = "dashed", linewidth = 1) +
+ labs(
+    title = "the relationship between total screen time and sleep quality",
+    x = "total screen time（hour）",
+    y = "sleep quality（1-10）",
+    
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    plot.caption = element_text(hjust = 0, size = 10, color = "gray50")
+  )
+print(scatter_plot)
+
+
+#6.2 draw box plot
+
+sleep_data_clean2$screen_time_group <- ifelse(
+  sleep_data_clean2$total_screen_time <= 2, "0-2 hours",
+  ifelse(sleep_data_clean2$total_screen_time <= 4, "2-4 hours",
+         ifelse(sleep_data_clean2$total_screen_time <= 6, "4-6 hours", ">6 hours"))
+)
+
+sleep_data_clean2$screen_time_group <- factor(
+  sleep_data_clean2$screen_time_group,
+  levels = c("0-2 hours", "2-4 hours", "4-6 hours", ">6 hours")
+)
+
+if (!require(ggplot2)) install.packages("ggplot2")
+library(ggplot2)
+
+box_plot <- ggplot(sleep_data_clean2, aes(x = screen_time_group, y = Sleep_Quality, fill = screen_time_group)) +
+  geom_boxplot(outlier.shape = NA, width = 0.6) +
+  geom_jitter(alpha = 0.4, size = 1, color = "black") +
+  scale_fill_brewer(palette = "Blues", guide = "none") +
+  labs(
+    title = "Distribution of Sleep Quality Across Different Total Screen Time Groups",
+    x = "Screen Time Group",
+    y = "Sleep Quality (1-10)"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text.x = element_text(angle = 0, hjust = 0.5)
+  )
+
+print(box_plot)
+#7.1 Pearson
+
+sleep_data_clean2$screen_time_group <- cut(
+  x = sleep_data_clean2$Screen_Time,  
+  breaks = c(0, 2, 4, Inf),  
+  labels = c("Low", "Medium", "High"),  
+  right = FALSE  
+)
+
+levels(sleep_data_clean2$screen_time_group)  
+table(sleep_data_clean2$screen_time_group)  
+
+sleep_data_clean2$screen_time_num <- ifelse(
+  sleep_data_clean2$screen_time_group == "Low", 1,
+  ifelse(sleep_data_clean2$screen_time_group == "Medium", 2,
+         ifelse(sleep_data_clean2$screen_time_group == "High", 3, NA))
+)
+
+sum(!is.na(sleep_data_clean2$screen_time_num) & !is.na(sleep_data_clean2$Sleep_Quality))
+
+pearson_test <- cor.test(
+  x = sleep_data_clean2$screen_time_num,
+  y = sleep_data_clean2$Sleep_Quality,
+  method = "pearson",
+  na.action = na.exclude
+)
+pearson_test
+pearson_corr <- round(pearson_test$estimate, 3)  
+pearson_p <- round(pearson_test$p.value, 4)
+# 7.2 Spearman
+
+sleep_data_clean2$screen_time_spearman <- as.numeric(sleep_data_clean2$screen_time_group)
+
+spearman_test <- cor.test(
+  x = sleep_data_clean2$screen_time_spearman,
+  y = sleep_data_clean2$Sleep_Quality,
+  method = "spearman",
+  na.action = na.exclude,
+  exact = FALSE 
+)
+
+spearman_test
+spearman_corr <- round(spearman_test$estimate, 3)  
+spearman_p <- round(spearman_test$p.value, 4)       
+
+#7.3outcome
+
+cat("=== Analysis results of the correlation between total screen time and sleep quality ===\n")
+
+pearson_corr <- pearson_test$estimate  
+pearson_p <- pearson_test$p.value      
+cat("1. Pearson correlation coefficient(linear relationship)：\n")
+cat(paste0("   correlation coefficient：", round(pearson_corr, 4), " | p value：", round(pearson_p, 4), "\n"))
+cat("   significance：", ifelse(pearson_p < 0.05, "p<0.05，significant", "p≥0.05，not significant"), "\n")
+
+cat("   Correlation intensity：", ifelse(abs(pearson_corr)>=0.7, "strong", ifelse(abs(pearson_corr)>=0.3, "intermediate", "weak")), "\n\n")
+
+spearman_corr <- spearman_test$estimate  
+spearman_p <- spearman_test$p.value      
+cat("2. Spearman rank correlation coefficient(monotonic relationship)：\n")
+cat(paste0("   correlation coefficient：", round(spearman_corr, 4), " | p value：", round(spearman_p, 4), "\n"))
+cat("   significance：", ifelse(spearman_p < 0.05, "p<0.05，significant", "p≥0.05，not significant"), "\n")
+cat("   Correlation intensity：", ifelse(abs(spearman_corr)>=0.7, "strong", ifelse(abs(spearman_corr)>=0.3, "intermediate", "weak")), "\n")
+# 8.core conclusion
+if (pearson_p < 0.05 && pearson_corr < 0) {
+  cat(paste0("\n conclusion：total screen time and sleep quality is", ifelse(abs(pearson_corr)>=0.7,"strong","intermediate"),"Negative correlation（Pearson r=",pearson_corr,", p<0.05），the longer the screen time, the worse the sleep quality."))
+} else if (spearman_p < 0.05 && spearman_corr < 0) {
+  cat(paste0("\n conclusion：total screen time and sleep quality is", ifelse(abs(spearman_corr)>=0.7,"strong","intermediate"),"Significant nonlinear negative correlation（Spearman ρ=",spearman_corr,", p<0.05），The longer the screen time, the overall decline in sleep quality."))
+} else {
+  cat("\n conclusion：No significant correlation was detected between total screen time and sleep quality（p≥0.05）。")}
+```
+
+
+
+```{r 500 part2 by ShengPeng RAO}
+if (!require("pROC")) install.packages("pROC")
+library(ggplot2)
+library(MASS)
+library(pROC)
+Sleep_<-read.csv("https://raw.githubusercontent.com/Archmi7/sleep-project/refs/heads/main/student_sleep_patterns.csv")
+# Visualization 
+ggplot(Sleep_, aes(x = Gender)) +
+  geom_bar(fill = "#007bff") +
+  labs(y = "Frequency")+ 
+  theme_minimal()
+
+ggplot(Sleep_, aes(x = University_Year)) +
+  geom_bar(fill = "#20c997") +
+  labs( y = "Frequency")+ 
+  theme_minimal()
+
+ggplot(Sleep_, aes(x = Sleep_Quality)) +
+  geom_bar(fill = "#e83e8c") +
+  labs( y = "Frequency")+ 
+  theme_minimal()
+
+# Transform the nominal data into binary data
+# Gender
+Sleep_$Gender_Female<-ifelse(Sleep_$Gender=="Female",1,0)
+Sleep_$Gender_Male<-ifelse(Sleep_$Gender=="Male",1,0)
+# University_Year
+Sleep_$SecondYear<-ifelse(Sleep_$University_Year=="2nd Year",1,0)
+Sleep_$ThirdYear<-ifelse(Sleep_$University_Year=="3rd Year",1,0)
+Sleep_$FourthYear<-ifelse(Sleep_$University_Year=="4th Year",1,0)
+
+# Dataset for regression
+Sleep_n<-subset(Sleep_, select=-c(Student_ID,Gender,University_Year))
+# Change Sleep_Quality into binary response variable
+Sleep_n$SQ_binary<-ifelse(Sleep_n$Sleep_Quality <= 3, 1, 0)
+
+# Correlation heat map
+library(corrplot)
+cor_matrix<-cor(Sleep_n)
+corrplot(cor_matrix, method = "color", addCoef.col = "black", tl.col = "black",number.cex = 0.4)
+
+# Ordinal logistic regression 
+# Full model
+Sleep_n$Sleep_Quality <- factor(Sleep_n$Sleep_Quality, ordered = TRUE)
+model_1<-polr(Sleep_Quality ~ Sleep_Duration + Caffeine_Intake + Screen_Time + Study_Hours +  Age + Sleep_Duration + Physical_Activity + Gender_Male + Gender_Female + Weekend_Sleep_End + Weekday_Sleep_End + Weekend_Sleep_Start + Weekday_Sleep_Start + SecondYear + ThirdYear + FourthYear, data = Sleep_n,Hess=TRUE)
+summary(model_1)
+# AIC stepwise
+step_model_1<- stepAIC(model_1, direction = "both")
+summary(step_model_1)
+
+# Logistic regression 
+# Full model
+model_2<-glm(SQ_binary ~ Sleep_Duration + Caffeine_Intake + Screen_Time + Study_Hours +  Age + Sleep_Duration + Physical_Activity + Gender_Male + Gender_Female + Weekend_Sleep_End + Weekday_Sleep_End + Weekend_Sleep_Start + Weekday_Sleep_Start + SecondYear + ThirdYear + FourthYear, data = Sleep_n, family=binomial)
+summary(model_2)
+
+# AIC stepwise
+step_model_2<- stepAIC(model_2, direction = "both")
+summary(step_model_2)
+
+# Result of regression
+final_model<-glm(formula = SQ_binary ~ Study_Hours + Gender_Female, family = binomial, data = Sleep_n)
+summary(final_model)
+
+# Calculate odds ratio through coefficients
+exp(c(-0.05404, -0.37700))
+
+# Evaluate the prediction ability of the logistic model
+prob <- predict(final_model, type = "response")
+roc_obj <- roc(Sleep_n$SQ_binary, prob)
+plot(roc_obj, main = "ROC Curve")
+auc(roc_obj)  # AUC value
+```
+- In this part, nominal data were transformed into binary data, which would work as dummy variables in the following regression analysis.
+- The result of  ordinal logistic regression indicates that it might be not suitable to conduct ordinal logistic regression on this data, so we decided to transform the data into binary version(SQ_binary):
+SQ_binary=1, when Sleep_Quality<=1st Qu.= 3 ;
+SQ_binary=0, otherwise.
+- From the AIC result, Both predictors hover around the 0.05–0.10 threshold, suggesting potential but not strong evidence of association. The reduction is modest, indicating that the predictors offer some explanatory power, but the model isn't dramatically better than the null.
+- At last, we evaluate the model through ROC Curve and AUC. The AUC value of the model is 0.5726, which suggests that the prediction ability of the model is poor
+- Conclusion:Though we obtain the information that females tend not to experience lower sleep quality and more study time is associated with slightly decrease in odds of poor sleep, we are still far from accurate prediction. 
+
+```{r 80000 part1 by YuTong ZHANG}
+if (!require("corrplot")) install.packages("corrplot")
+library(tidyverse)
+library(ggplot2)
+library(corrplot)
+data<-read.csv( "https://raw.githubusercontent.com/Archmi7/sleep-project/main/enhanced_student_habits_performance_dataset.csv")
+data <- data[data$sleep_hours+data$screen_time <= 24, ]
+# Quick Data Check
+cat(nrow(data), "rows |", 
+    sum(is.na(data$screen_time)), "missing screen_time |", 
+    sum(is.na(data$sleep_hours)), "missing sleep_hours")
+#Step1:Descriptive Statistical Analysis
+#1.Descriptive Statistics For Key Variables
+cat("Screen Time Summary:\n",summary(data$screen_time))
+cat("\nSleep Hours Summary:\n",summary(data$sleep_hours))
+#2.Calculate Detailed Statistics
+screen_stats <- c(
+  Mean = mean(data$screen_time),
+  SD = sd(data$screen_time),
+  Median = median(data$screen_time),
+  Min = min(data$screen_time),
+  Max = max(data$screen_time)
+)
+sleep_stats <- c(
+  Mean = mean(data$sleep_hours),
+  SD = sd(data$sleep_hours),
+  Median = median(data$sleep_hours),
+  Min = min(data$sleep_hours),
+  Max = max(data$sleep_hours)
+)
+stats_df <- data.frame(Screen_Time = screen_stats, Sleep_Hours = sleep_stats)
+print(stats_df)
+#Step2:Univariate Analysis
+#1. Screen Time Distribution
+p1 <- ggplot(data, aes(x = screen_time)) +
+  geom_histogram(fill = "steelblue", color = "black", alpha = 0.7, bins = 30) +
+  labs(title = "Distribution of Screen Time", 
+       x = "Screen Time (hours)", 
+       y = "Frequency") +
+  theme_minimal()
+  print(p1)
+  # 2. Sleep Hours Distribution
+p2 <- ggplot(data, aes(x = sleep_hours)) +
+  geom_histogram(fill = "darkgreen", color = "black", alpha = 0.7, bins = 30) +
+  labs(title = "Distribution of Sleep Hours", 
+       x = "Sleep Hours (hours)", 
+       y = "Frequency") +
+  theme_minimal()
+  print(p2)
+#2.Outlier Assessment
+screen_Q1 <- quantile(data$screen_time, 0.25)
+screen_Q3 <- quantile(data$screen_time, 0.75)
+screen_IQR <- screen_Q3 - screen_Q1
+screen_outliers <- sum(data$screen_time < (screen_Q1 - 1.5*screen_IQR) | 
+                      data$screen_time > (screen_Q3 + 1.5*screen_IQR))
+sleep_Q1 <- quantile(data$sleep_hours, 0.25)
+sleep_Q3 <- quantile(data$sleep_hours, 0.75)
+sleep_IQR <- sleep_Q3 - sleep_Q1
+sleep_outliers <- sum(data$sleep_hours < (sleep_Q1 - 1.5*sleep_IQR) | 
+                     data$sleep_hours > (sleep_Q3 + 1.5*sleep_IQR))
+cat("Screen time outliers:", screen_outliers, "\n")
+cat("Sleep hours outliers:", sleep_outliers, "\n")
+#Conclusion: Outliers represent a small portion of dataset and will be retained for analysis.
+#Step2:Bivariate Analysis
+#1.scatter plot
+scatter_plot <- ggplot(data, aes(x = screen_time, y = sleep_hours)) +
+  geom_point(alpha = 0.3, color = "blue") +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  labs(title = "Relationship Between Screen Time and Sleep Duration",
+       x = "Screen Time (hours)", y = "Sleep Hours (hours)") +
+  theme_minimal()
+print(scatter_plot)
+#2.Correlation Coefficient
+cor_pearson <- cor(data$screen_time, data$sleep_hours)
+cat("Pearson Correlation:", round(cor_pearson, 3), "\n")
+cat("P-value:", format.pval(cor.test(data$screen_time, data$sleep_hours)$p.value, digits = 3))
+#3.Group Analysis
+data$screen_group <- cut(data$screen_time, 
+                         breaks = quantile(data$screen_time, probs = c(0, 0.25, 0.5, 0.75, 1)),
+                         labels = c("Low", "Medium-Low", "Medium-High", "High"),
+                         include.lowest = TRUE)
+group_comparison <- data %>%
+  group_by(screen_group) %>%
+  summarise(
+    n = n(),
+    mean_screen = mean(screen_time),
+    mean_sleep = mean(sleep_hours),
+    sd_sleep = sd(sleep_hours)
+  )
+print(group_comparison)
+group_plot <- ggplot(data, aes(x = screen_group, y = sleep_hours)) +
+  geom_boxplot(fill = "lightblue") +
+  labs(title = "Sleep Hours by Screen Time Group",
+       x = "Screen Time Group",
+       y = "Sleep Hours") +
+  theme_minimal()
+print(group_plot)
+```
+- Negligible Practical Impact: Only a statistically significant but practically very weak association exists between screen time and sleep duration.
+- Sleep Duration Shows Remarkable Stability: Even as screen time more than doubled from the lowest to the highest usage group (6.1h → 13.1h),average sleep duration remained anchored around 7 hours, with a negligible maximum fluctuation of just 0.09 hours (≈ 5 minutes).
+- Other Factors Are Likely Dominant: Sleep duration appears to be primarily governed by factors other than screen time (e.g., circadian rhythms, academic stress, daily routines).
+
+```{r 80000 part2 k by XiaoRui WANG}
+set.seed(5102)
+if (!require("Rtsne")) install.packages("Rtsne")
+if (!require("uwot")) install.packages("uwot")
+if (!require("fmsb")) install.packages("fmsb")
+if (!require("RColorBrewer")) install.packages("RColorBrewer")
+if (!require("ClusterR")) install.packages("ClusterR")
+if (!require("cluster")) install.packages("cluster")
+library(ggplot2)
+library(dplyr)
+library(Rtsne)
+library(uwot)
+library(fmsb)
+library(RColorBrewer)
+library(ClusterR)
+library(cluster)
+sleep<-read.csv("https://raw.githubusercontent.com/Archmi7/sleep-project/refs/heads/main/enhanced_student_habits_performance_dataset.csv")
+sleep <- sleep %>%
+  filter(screen_time + sleep_hours <= 24,
+         social_media_hours+netflix_hours<=screen_time,
+         social_media_hours+netflix_hours+study_hours_per_day+sleep_hours<=24)
+#as.numeric
+sleep$part_time_job <- as.numeric (ifelse(sleep$part_time_job == "Yes", 2,
+                      ifelse(sleep$part_time_job == "No", 0, sleep$part_time_job)))
+sleep$diet_quality <- as.numeric (ifelse(sleep$diet_quality == "Good", 2,
+                      ifelse(sleep$diet_quality == "Fair" , 1, 
+                    ifelse (sleep$diet_quality == "Poor", 0, sleep$diet_quality))))
+
+sleep$internet_quality <- as.numeric (ifelse(sleep$internet_quality == "High", 2,
+                      ifelse(sleep$internet_quality == "Medium" , 1, 
+                    ifelse (sleep$internet_quality == "Low", 0, sleep$internet_quality))))
+
+sleep$extracurricular_participation <- as.numeric(ifelse(sleep$extracurricular_participation == "Yes", 2,
+                      ifelse(sleep$extracurricular_participation == "No", 0, sleep$extracurricular_participation)))
+
+sleep.numeric <- sleep[,sapply(sleep, is.numeric)]
+# Remove ID-like columns
+sleep.numeric <- subset(sleep.numeric, select = -student_id)
+sleep.numeric$screentime_entertain <- sleep.numeric$screen_time - sleep.numeric$study_hours_per_day
+sleep.numeric <- subset(sleep.numeric, select = -netflix_hours)
+sleep.numeric <- subset(sleep.numeric, select = -social_media_hours)
+sleep.numeric <- subset(sleep.numeric, select = -previous_gpa)
+#normalization
+sleep.scaled <- scale(sleep.numeric)
+#umap
+umap_res <- uwot::umap(sleep.scaled, n_neighbors = 25, min_dist = 0.1, n_components = 2, metric = "euclidean")
+
+#bind
+umap_df <- as.data.frame(umap_res)
+colnames(umap_df) <- c("UMAP1", "UMAP2")
+umap_df <- bind_cols(as.data.frame(sleep.numeric), umap_df)
+
+#pca&kmeans
+# PCA
+pca <- prcomp(sleep.scaled, center = TRUE, scale. = TRUE)
+cumprop <- cumsum(pca$sdev^2) / sum(pca$sdev^2)
+plot(cumprop, type = "b", xlab = "PCs", ylab = "Cumulative contribution rate of variance")
+
+#Elbow method 
+k_r <- 1:12
+wss <- numeric(length(k_r))
+
+for (i in seq_along(k_r)) {
+  k <- k_r[i]
+  km <- kmeans(pca$x, centers = k, nstart = 20,iter.max = 50)
+  wss[i] <- km$tot.withinss
+}
+
+plot(k_r, wss, type = "b",
+     xlab = "k",
+     ylab = "Cumulative Variance",
+     main = paste("elbow method"))
+```
+
+
+```{r 80000 part2 umap by XiaoRui WANG}
+set.seed(5102)
+k<-4
+km <- kmeans(scale(sleep.numeric) ,centers = k, nstart = 50)
+umap_df$cluster <- factor(km$cluster)
+
+#ggplot
+ggplot(umap_df, aes(x = UMAP1, y = UMAP2, color = cluster)) +
+  geom_point(alpha = 0.25, size = 0.3) +
+  scale_color_brewer(palette = "Set2") +
+  guides(color = guide_legend(override.aes = list(size = 4))) +
+  theme_minimal() +
+  ggtitle(paste("UMAP"))+
+  theme(plot.title = element_text(hjust = 0.5),legend.key.size = unit(1, "lines"))
+#sumvar
+var.sum <- rowSums(abs(pca$rotation[,1:4]))
+top_features <- names(sort(var.sum, decreasing = TRUE))[1:6]
+
+cluster_means <- umap_df %>%
+  group_by(cluster) %>%
+  summarise(across(c(top_features,sleep_hours), ~mean(.x, na.rm = TRUE))) %>%
+  ungroup()
+
+max_row <- apply(cluster_means[,-1], 2, max, na.rm = TRUE)
+min_row <- apply(cluster_means[,-1], 2, min, na.rm = TRUE)
+
+radar_df <- cluster_means
+radar_values <- as.data.frame(radar_df[,-1])
+radar_for_fmsb <- rbind(max_row, min_row, radar_values)
+
+#color
+pal <- brewer.pal(n = k, name = "Set2")
+# plot radar
+par(mfrow = c(1,1))
+radarchart(radar_for_fmsb,
+           axistype = 1,
+           seg = 4,
+           pcol = pal,   
+           pfcol = scales::alpha(pal[1:k], 0.3), 
+           plwd = 2,
+           cglcol = "grey80",
+           cglty = 1,
+           axislabcol = "grey40",
+           caxislabels = round(seq(min(min_row), max(max_row), length.out = 5),2),
+           vlcex = 1.2,
+           title = paste("Radar chart top 6 features by cluster with sleep"),
+           vlabels = c("screentime\nentertainment","study\nhours","exam\nanxiety\nscore","motivation\nlevel"," screen\ntime","exam\nscore","sleep\nhours"))
+
+legend("topright",
+       legend = paste("cluster", levels(umap_df$cluster)),
+       fill = scales::alpha(pal, 0.4),
+       border = pal[1:k],
+       bty = "n")
+#heatmap
+if (!require("reshape2")) install.packages("reshape2")
+library(reshape2)
+cor_by_cluster <- umap_df %>%
+  group_by(cluster) %>%
+  summarise(across(where(is.numeric), ~cor(.x, sleep_hours, use = "complete.obs"))) %>%
+  pivot_longer(-cluster, names_to = "variable", values_to = "correlation")
+
+ggplot(cor_by_cluster, aes(x = variable, y = cluster, fill = correlation)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(
+    low = "blue", mid = "white", high = "red", midpoint = 0,
+    limits = c(-1, 1)  
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(
+    title = "Correlation with Sleep Hours by Cluster",
+    x = "Variable", y = "Cluster", fill = "Correlation"
+  )
+#model
+if (!require("broom")) install.packages("broom")
+library(broom)
+cluster_models <- lapply(levels(umap_df$cluster), function(cl) {
+  df <- umap_df %>% filter(cluster == cl)
+  model_data <- df[, c("sleep_hours", top_features)]
+  model <- lm(sleep_hours ~ ., data = model_data)
+  tidy(model) %>% mutate(cluster = cl)
+})
+
+cluster_model_df <- do.call(rbind, cluster_models)
+cluster_model_df %>%
+  filter(p.value < 0.05) %>%
+  ggplot(aes(x = reorder(term, estimate), y = estimate, fill = cluster)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  labs(title = "Significant Predictors of Sleep Hours by Cluster",
+       x = "Variable", y = "Coefficient") +
+  theme_minimal()
+```
+- We can use the Radar plot extract features through clustering simply. Marked as the following 4 groups:
+- Cluster 1: Hard-working
+- Cluster 2: Good sleeping
+- Cluster 3: Talent
+- Cluster 4: Playful
+
+- The results showed that the influence of the variables was relatively weak, indicating that the driving factors of sleep behavior vary across groups.
+
+
+
