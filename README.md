@@ -16,3 +16,8 @@ All team members approve our work presented in our GitHub repository including t
 **DATASET USE:**
 - Arsalan Jamal (2024). Student Sleep Patterns, Version 1, from https://www.kaggle.com/datasets/arsalanjamal002/student-sleep-patterns/data
 - Aryan Kumar (2025, April), Student Habits and Academic Performance Dataset, from https://www.kaggle.com/datasets/aryan208/student-habits-and-academic-performance-dataset
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/77f305d5-cbc6-45b0-b65d-b726910ec6f0" width="475" height="475" />
+</p>
+
