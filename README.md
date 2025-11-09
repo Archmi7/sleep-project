@@ -13,3 +13,6 @@
 All team members contributed to the GitHub repository and prepared the presentation. 
 All team members approve our work presented in our GitHub repository including this contribution statement.
 
+**DATASET USE:**
+- Arsalan Jamal (2024). Student Sleep Patterns, Version 1, from https://www.kaggle.com/datasets/arsalanjamal002/student-sleep-patterns/data
+- Aryan Kumar (2025, April), Student Habits and Academic Performance Dataset, from https://www.kaggle.com/datasets/aryan208/student-habits-and-academic-performance-dataset
