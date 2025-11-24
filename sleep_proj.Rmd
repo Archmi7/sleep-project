@@ -1,0 +1,221 @@
+---
+title: "sleep_proj"
+author: "wang"
+date: "2025-11-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r sleep}
+set.seed(5102)
+if (!require("Rtsne")) install.packages("Rtsne")
+if (!require("uwot")) install.packages("uwot")
+if (!require("fmsb")) install.packages("fmsb")
+if (!require("RColorBrewer")) install.packages("RColorBrewer")
+if (!require("ClusterR")) install.packages("ClusterR")
+if (!require("cluster")) install.packages("cluster")
+library(ggplot2)
+library(dplyr)
+library(Rtsne)
+library(uwot)
+library(fmsb)
+library(RColorBrewer)
+library(ClusterR)
+library(cluster)
+sleep<-read.csv("https://raw.githubusercontent.com/Archmi7/sleep-project/refs/heads/main/enhanced_student_habits_performance_dataset.csv")
+sleep2<-read.csv("https://raw.githubusercontent.com/Archmi7/sleep-project/refs/heads/main/student_sleep_patterns.csv")
+sleep <- sleep %>%
+  filter(screen_time + sleep_hours <= 24,
+         social_media_hours+netflix_hours<=screen_time,
+         social_media_hours+netflix_hours+study_hours_per_day+sleep_hours<=24)
+#as.numeric
+sleep$part_time_job <- as.numeric (ifelse(sleep$part_time_job == "Yes", 2,
+                      ifelse(sleep$part_time_job == "No", 0, sleep$part_time_job)))
+sleep$diet_quality <- as.numeric (ifelse(sleep$diet_quality == "Good", 2,
+                      ifelse(sleep$diet_quality == "Fair" , 1, 
+                    ifelse (sleep$diet_quality == "Poor", 0, sleep$diet_quality))))
+
+sleep$internet_quality <- as.numeric (ifelse(sleep$internet_quality == "High", 2,
+                      ifelse(sleep$internet_quality == "Medium" , 1, 
+                    ifelse (sleep$internet_quality == "Low", 0, sleep$internet_quality))))
+
+sleep$extracurricular_participation <- as.numeric(ifelse(sleep$extracurricular_participation == "Yes", 2,
+                      ifelse(sleep$extracurricular_participation == "No", 0, sleep$extracurricular_participation)))
+
+sleep.numeric <- sleep[,sapply(sleep, is.numeric)]
+# Remove ID-like columns
+sleep.numeric <- subset(sleep.numeric, select = -student_id)
+sleep.numeric$screentime_entertain <- sleep.numeric$screen_time - sleep.numeric$study_hours_per_day
+sleep.numeric <- subset(sleep.numeric, select = -netflix_hours)
+sleep.numeric <- subset(sleep.numeric, select = -social_media_hours)
+sleep.numeric <- subset(sleep.numeric, select = -previous_gpa)
+#normalization
+sleep.scaled <- scale(sleep.numeric)
+#umap
+umap_res <- uwot::umap(sleep.scaled, n_neighbors = 25, min_dist = 0.1, n_components = 2, metric = "euclidean")
+
+#bind
+umap_df <- as.data.frame(umap_res)
+colnames(umap_df) <- c("UMAP1", "UMAP2")
+umap_df <- bind_cols(as.data.frame(sleep.numeric), umap_df)
+
+#pca&kmeans
+# PCA
+pca <- prcomp(sleep.scaled, center = TRUE, scale. = TRUE)
+cumprop <- cumsum(pca$sdev^2) / sum(pca$sdev^2)
+plot(cumprop, type = "b", xlab = "主成分数", ylab = "累计方差贡献率")
+
+#Elbow method 
+k_r <- 1:12
+wss <- numeric(length(k_r))
+
+for (i in seq_along(k_r)) {
+  k <- k_r[i]
+  km <- kmeans(pca$x, centers = k, nstart = 20,)
+  wss[i] <- km$tot.withinss
+}
+
+plot(k_r, wss, type = "b",
+     xlab = "k",
+     ylab = "Sum of the squared errors(wss)",
+     main = paste("elbow method"))
+```
+
+
+```{r mutivalue}
+set.seed(5102)
+
+k<-4
+km <- kmeans(scale(sleep.numeric) ,centers = k, nstart = 50)
+umap_df$cluster <- factor(km$cluster)
+
+#ggplot
+ggplot(umap_df, aes(x = UMAP1, y = UMAP2, color = cluster)) +
+  geom_point(alpha = 0.25, size = 0.3) +
+  scale_color_brewer(palette = "Set2") +
+  guides(color = guide_legend(override.aes = list(size = 4))) +
+  theme_minimal() +
+  ggtitle(paste("UMAP"))+
+  theme(plot.title = element_text(hjust = 0.5),legend.key.size = unit(1, "lines"))
+#sumvar
+var.sum <- rowSums(abs(pca$rotation[,1:4]))
+top_features <- names(sort(var.sum, decreasing = TRUE))[1:6]
+
+cluster_means <- umap_df %>%
+  group_by(cluster) %>%
+  summarise(across(c(top_features,sleep_hours), ~mean(.x, na.rm = TRUE))) %>%
+  ungroup()
+
+max_row <- apply(cluster_means[,-1], 2, max, na.rm = TRUE)
+min_row <- apply(cluster_means[,-1], 2, min, na.rm = TRUE)
+
+radar_df <- cluster_means
+radar_values <- as.data.frame(radar_df[,-1])
+radar_for_fmsb <- rbind(max_row, min_row, radar_values)
+
+#color
+pal <- brewer.pal(n = k, name = "Set2")
+# plot radar
+par(mfrow = c(1,1))
+radarchart(radar_for_fmsb,
+           axistype = 1,
+           seg = 4,
+           pcol = pal,   
+           pfcol = scales::alpha(pal[1:k], 0.3), 
+           plwd = 2,
+           cglcol = "grey80",
+           cglty = 1,
+           axislabcol = "grey40",
+           caxislabels = round(seq(min(min_row), max(max_row), length.out = 5),2),
+           vlcex = 1.2,
+           title = paste("Radar chart top 6 features by cluster with sleep"),
+           vlabels = c("screentime\nentertainment","study\nhours","exam\nanxiety\nscore","motivation\nlevel"," screen\ntime","exam\nscore","sleep\nhours"))
+
+legend("topright",
+       legend = paste("cluster", levels(umap_df$cluster)),
+       fill = scales::alpha(pal, 0.4),
+       border = pal[1:k],
+       bty = "n")
+
+
+```
+
+```{r heatmap}
+set.seed(5102)
+if (!require("reshape2")) install.packages("reshape2")
+library(reshape2)
+cor_by_cluster <- umap_df %>%
+  group_by(cluster) %>%
+  summarise(across(where(is.numeric), ~cor(.x, sleep_hours, use = "complete.obs"))) %>%
+  pivot_longer(-cluster, names_to = "variable", values_to = "correlation")
+
+ggplot(cor_by_cluster, aes(x = variable, y = cluster, fill = correlation)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(
+    low = "blue", mid = "white", high = "red", midpoint = 0,
+    limits = c(-1, 1)  
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(
+    title = "Correlation with Sleep Hours by Cluster",
+    x = "Variable", y = "Cluster", fill = "Correlation"
+  )
+
+
+```
+
+```{r model}
+# 安装并加载必要的包
+if (!require("randomForest")) install.packages("randomForest")
+
+library(randomForest)
+library(ggplot2)
+library(dplyr)
+
+# 针对每个 cluster 建立随机森林模型
+cluster_models <- lapply(levels(umap_df$cluster), function(cl) {
+  df <- umap_df %>% filter(cluster == cl)
+  model_data <- df[, c("sleep_hours", top_features)]
+  
+  # 随机森林回归模型
+  model <- randomForest(sleep_hours ~ ., data = model_data,
+                        ntree = 1000, mtry = floor(sqrt(ncol(model_data)-1)))
+  
+  # 提取变量重要性
+  importance_df <- as.data.frame(importance(model))
+  importance_df$term <- rownames(importance_df)
+  importance_df$cluster <- cl
+  importance_df$r2 <- model$rsq[length(model$rsq)]
+  importance_df
+})
+
+# 合并所有 cluster 的结果
+cluster_model_df <- do.call(rbind, cluster_models)
+
+# 可视化不同 cluster 下的变量重要性
+ggplot(cluster_model_df, aes(x = reorder(term, IncNodePurity), 
+                             y = IncNodePurity, fill = cluster)) +
+  geom_col(position = "dodge") +
+  coord_flip() +
+  labs(title = "Random Forest Variable Importance by Cluster",
+       x = "Variable", y = "Importance (IncNodePurity)") +
+  theme_minimal()
+
+
+```
+```{r}
+ggplot(cluster_model_df, aes(x = reorder(term, IncNodePurity), 
+                             y = IncNodePurity, fill = cluster)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  facet_wrap(~cluster, scales = "free_y") +
+  labs(title = "Random Forest Variable Importance by Cluster",
+       x = "Variable", y = "Importance (IncNodePurity)") +
+  theme_minimal()
+
+```
